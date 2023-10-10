@@ -1,0 +1,476 @@
+rm(list=ls())
+setwd("C:/Users/Mohamed/Desktop/Desktop/UoM/Thesis/Mazhar/UK/Data/Book value data/final data set/final data set 2")
+#//nask.man.ac.uk/home$/Downloads/MB
+library(plm)
+library(coefplot)
+library(gplots)
+library(ggplot2)
+library(CADFtest)
+library(dplyr)
+library(stargazer)
+library(car)
+library(corrplot)
+library(nlme)
+library(tseries)
+library(lmtest)
+library(oaxaca)
+#loading data------------------------------------------------------------------------
+data_CGT <- read.csv("CGT time series1.csv")
+data_publ<- read.csv("MV, publicly listed EBITDA and MC.csv")
+data_publ_num <- read.csv("MV, publicly listed EBITDA and MC numbers.csv")
+ref_rate <- read.csv("Bank Rate history and data  Bank of England Database.csv")
+month_ref_rate <- read.csv("Monthly reference rate.csv")
+UK_growth <- read.csv("IMF UK growth rate.csv")
+VIX_VFTSE <- read.csv("VIX VFTSE equal dates.csv")
+VIX <- read.csv("VIX.csv")
+
+CGT_2016 <- 0.20
+CGT_2010 <- 0.28
+CGT_2008 <- 0.18
+
+#Isolating Market capitalization------------------------------------------------------------------------
+data_publ_num <- replace(data_publ_num, data_publ_num == "n.s.", NA)
+data_publ_num_mc <- data_publ_num[-c(1:21), ]
+
+
+num_rows <- nrow(data_publ_num_mc)
+num_cols <- ncol(data_publ_num_mc)
+
+# Initialize an empty data frame to store the differences
+accrued_gains <- as.data.frame(matrix(0, nrow = num_rows - 1, ncol = num_cols))
+
+# Loop through each column and calculate differences for each row
+for (col in 1:num_cols) {
+  if (is.numeric(data_publ_num_mc[, col])) {
+    accrued_gains[, col] <- data_publ_num_mc[, col][-num_rows] - data_publ_num_mc[, col][-1]
+  }
+}
+
+years <- 2022:2009
+accrued_gains$V1<- years
+
+accrued_gains1 <- replace(accrued_gains, accrued_gains < 0, 0)
+accrued_gains1 <- replace(accrued_gains1, accrued_gains1 == "n.s", 0)
+accrued_gains <- replace(accrued_gains, accrued_gains == "n.s", NA)
+
+#Summing up annual accrued gains------------------------------------------------------------------------
+A_A_G <- matrix(0,14,2 )
+for (i in 1:14) {
+  A_A_G[i, ] <- sum(accrued_gains1[i, ])
+}
+
+A_A_G[,2] <- years
+colnames(A_A_G)<- c("Gain", "Year")
+
+#Calculating taxes on accrued gains
+T_A_A_G <- matrix(0,14,2)
+T_A_A_G [1:7] <- A_A_G[1:7]*CGT_2016
+T_A_A_G [8:13] <- A_A_G[8:13]*CGT_2010
+T_A_A_G [14] <- A_A_G[14]*CGT_2008
+T_A_A_G [,2] <- A_A_G[,2]
+colnames(T_A_A_G )<- c("Tax on accrued Gain", "Year")
+
+#Calculating taxes on realized gains
+Realized_gains <- as.data.frame(data_CGT$Total.amounts.of.gains[23:35])
+Realized_gains$years<- data_CGT$Year.of.disposal[23:35]
+names(Realized_gains) <- c("Value", "years")
+
+#Calculating taxes on realized gains
+T_A_R_G <- matrix(0,13,2)
+T_A_R_G[1] <- Realized_gains$Value[1]*CGT_2008*0.2 #Unlisted shares accounted for 61% of gains made on financial assets  
+T_A_R_G[2:7] <- Realized_gains$Value[2:7]*CGT_2010*0.2
+T_A_R_G[8:13] <- Realized_gains$Value[8:13]*CGT_2016*0.2
+T_A_R_G [,2] <- A_A_G[14:2,2]
+T_A_R_G[,1] <- rev(T_A_R_G[,1])
+T_A_R_G[,2] <- rev(T_A_R_G[,2])
+
+colnames(T_A_R_G )<- c("Tax on Realized Gain", "Year")
+
+#Plotting taxes on AG vs RG
+par(mfrow = c(1, 1))
+plot(y = T_A_A_G[2:14,1], x= T_A_A_G[2:14,2] , type = "l", col= "red", lwd = 3,
+     ylim = c(min(min(T_A_A_G[2:14, 1]), min(T_A_R_G)), 
+              max(max(T_A_A_G[2:14, 1]), max(T_A_R_G))), ylab = "Taxes collected (GBP Million)", xlab = "Year")
+lines(y = T_A_R_G[,1], x= T_A_R_G[,2], type = "l", col= "darkblue", lwd = 3 , cex= 1)
+legend("top", legend = c("Taxes on Accrual Gains", "Taxes on Realized Gains"), col= c("red", "blue"), lty =1, cex= 0.5)
+
+#Plotting AG vs RG
+par(mfrow = c(1, 1))
+plot(y= A_A_G[2:14,1], x= A_A_G[2:14,2], type = "l", col= "red", lwd = 3, 
+     ylim = c(min(min(A_A_G[2:14, 1]), min(Realized_gains$Value)), 
+              max(max(A_A_G[2:14, 1]), max(Realized_gains$Value))), ylab = "Gains (GBP Million)", xlab = "Year")
+lines(y= Realized_gains$Value, x= 2009:2021, type = "l", col= "darkblue", lwd = 3)
+legend("top", legend = c("Accrual Gains", "Realized Gains"), col= c("red", "blue"), lty =1, cex= 1.15)
+
+difference_tax<- T_A_A_G[2:14]-T_A_R_G
+difference_tax[,2]<- T_A_R_G[,2]
+normalization_factor <- difference_tax[13, 1]
+difference_tax_normalized <- difference_tax / normalization_factor
+difference_tax_normalized[,2] <- T_A_R_G[,2]
+colnames(difference_tax_normalized )<- c("Norm Tax difference", "Year")
+
+plot(y= difference_tax_normalized[,1], x= difference_tax_normalized[,2], type = "l", col= "darkgreen", lwd = 3, ylim = c(0.5,1.88)
+     , ylab = "Difference of Taxes collected Normalized", xlab = "Year")
+
+
+plot(y= month_ref_rate$Average,x= month_ref_rate$Year, lwd = 3, col= "red", type= "l", ylab = "Rate", xlab = "Year",ylim = c(-11.5,8))
+lines(y= UK_growth$UK.Real.GDP.growth..Annual.percent.change.[30:43],x= UK_growth$Year[30:43], lwd = 3, col= "darkgreen", type= "l", ylab = "Annual Growth Rate", xlab = "Year")
+legend("top", legend = c("Annual Average Interest Rate", "UK Growth Rate"), col= c("red", "darkgreen"), lty =1, cex= 0.5)
+
+#Test correlation of VIX and VFTSE
+corr_V_VF <- cor(VIX_VFTSE$VIX.Index, VIX_VFTSE$VFTSE.index)
+par(mfrow= c(1,1))
+plot(VIX_VFTSE$VFTSE.index, type = "l", lwd =1.5, col= "red",ylab = "Volatility", xlab = "Year (2008:2019)")
+lines(VIX_VFTSE$VIX.Index, type = "l", lwd =1.5, col= "blue")
+legend("top", legend = c("VFTSE", "VIX"), col= c("red", "blue"), lty =1)
+
+#---------------------------------------------------------------------------------------------------------------------------------
+
+# Create a vector of the sequence "2022:2009"
+sequence <- 2022:2009
+
+# Repeat the sequence 1413 times
+repeated_sequence <- rep(sequence, times = 1413)
+
+# Create a vector with the repeating numbers from 1 to 1413
+repeating_numbers <- rep(1:1413, each = 14)
+
+# Create a data frame with the repeated sequence and the repeating numbers as columns
+data_frame <- data.frame(Company = repeating_numbers, Year = repeated_sequence)
+EBITD <- data_publ_num[2:15,]
+Market_cap <- data_publ_num[22:35,]
+data_frame$EBITD_margin<- 0
+data_frame$Accrued_gain<- 0
+data_frame$Market_cap <- 0
+
+# Create a loop to assign the EBITDA values to the EBITD_margin column
+for (i in 1:1413) {
+  # Extract the EBITDA values for the current company
+  ebitda <- EBITD[, i+1]
+  # Calculate the starting and ending index for the current company in the EBITD_margin column
+  start_index <- (i - 1) * 14 + 1
+  end_index <- i * 14
+  # Assign the EBITDA values to the EBITD_margin column
+  data_frame$EBITD_margin[start_index:end_index] <- ebitda
+}
+
+for (i in 1:1413) {
+  # Extract the MC values for the current company
+  mc <- Market_cap[, i+1]
+  # Calculate the starting and ending index for the current company in the Market_cap column
+  start_index <- (i - 1) * 14 + 1
+  end_index <- i * 14
+  # Assign the EBITDA values to the EBITD_margin column
+  data_frame$Market_cap[start_index:end_index] <- mc
+}
+
+# Create a loop to assign the accrued gains to the accrued gains column
+for (i in 1:1413) {
+  # Extract the accrued gains for the current company
+  a_g <- accrued_gains[, i+1]
+  # Calculate the starting and ending index for the current company in the EBITD_margin column
+  start_index_g <- (i - 1) * 14 + 1
+  end_index_g <- i * 14
+  # Assign the EBITDA values to the EBITD_margin column
+  data_frame$Accrued_gain[start_index_g:end_index_g] <- a_g
+}
+
+data_frame$Market_cap <- as.numeric(data_frame$Market_cap)
+data_frame$EBITD_margin <- as.numeric(data_frame$EBITD_margin)
+data_frame$avg_month_ref_rate <- rep(month_ref_rate[15:2,4], times=1413)
+data_frame$UK_GR <- rep(UK_growth$UK.Real.GDP.growth..Annual.percent.change.[43:30], times=1413)
+data_frame$AvG.annual.VIX.index <- rep(VIX$AvG.VIX.index[1:14], times = 1413)
+
+
+# Replace 0 values with NA
+data_frame$EBITD_margin[data_frame$EBITD_margin == 0.00] <- NA
+data_frame$EBITD_margin[data_frame$EBITD_margin == "0.00"] <- NA
+data_frame$Accrued_gain[data_frame$Accrued_gain == "0.00"] <- 0
+data_frame$Market_cap[data_frame$Market_cap == "0.00"] <- 0
+
+# Replace empty cells with NA
+data_frame$EBITD_margin[data_frame$EBITD_margin == ""] <- NA
+pdata_frame <- pdata.frame(data_frame, c("Company", "Year"))
+
+# Step 1: Calculate the number of valid EBITD observations per company
+valid_obs_counts <- pdata_frame %>%
+  group_by(Company) %>%
+  summarise(valid_obs = sum(!is.na(EBITD_margin)))
+
+# Step 2: Filter out companies with less than 14 valid observations
+panel_data_balanced <- pdata_frame %>%
+  inner_join(valid_obs_counts, by = "Company") %>%
+  filter(valid_obs == 14)
+
+
+# Step 3: Calculate the number of non zero Market cap observations per company
+valid_obs_counts2 <- panel_data_balanced %>%
+  group_by(Company) %>%
+  summarise(valid_obs2 = sum((Market_cap != 0)))
+
+# Step 4: Filter out companies with less than 14 valid observations
+panel_data_balanced1 <- panel_data_balanced %>%
+  inner_join(valid_obs_counts2, by = "Company") %>%
+  filter(valid_obs2 == 14)
+
+
+#Plots---------------------------------------------------------------------------------------------------
+
+#Mean across Market cap buckets
+#Calculate the number of Market cap < 292.39 observations per company
+small_count <- panel_data_balanced1 %>%
+  group_by(Company) %>%
+  summarise(small = sum((Market_cap < 292.39)))
+
+# Step : Filter out companies with less than 14 valid observations
+panel_data_balanced_small <- panel_data_balanced1 %>%
+  inner_join(small_count, by = "Company") %>%
+  filter(small == 14)
+
+#Calculate the number of 292.39 < Market cap < 3000 observations per company
+Mid_count <- panel_data_balanced1 %>%
+  group_by(Company) %>%
+  summarise(mid = sum((Market_cap >= 292.39 & Market_cap < 3000)))
+
+# Step : Filter out companies with less than 14 valid observations
+panel_data_balanced_mid <- panel_data_balanced1 %>%
+  inner_join(Mid_count, by = "Company") %>%
+  filter(mid == 14)
+ 
+#Calculate the number of  Market cap >= 3000 observations per company
+Large_count <- panel_data_balanced1 %>%
+  group_by(Company) %>%
+  summarise(large = sum(( Market_cap >= 3000)))
+
+# Step : Filter out companies with less than 14 valid observations
+panel_data_balanced_large <- panel_data_balanced1 %>%
+  inner_join(Large_count, by = "Company") %>%
+  filter(large == 14)
+
+panel_data_balanced1$Large_dummy <- 0
+
+panel_data_balanced1$Large_dummy <- replace(panel_data_balanced1$Large_dummy,
+                       panel_data_balanced1$Market_cap>= 3000, 1)
+#------------------------------------------------------------------------------
+
+par(mfrow = c(1,1))
+plotmeans(Market_cap ~ Company, 
+          main = paste("Heterogeneity across small-sized companies"),
+          data = panel_data_balanced_small, n.label = FALSE, ylab = "Market Capitalization (GBP Million)", xlab = "Company",
+          lwd = 3, col = "red")
+plotmeans(Market_cap ~ Company, 
+          main = paste("Heterogeneity across medium-sized companies"),
+          data = panel_data_balanced_mid, n.label = FALSE, ylab = "Market Capitalization (GBP Million)", xlab = "Company",
+          lwd = 3, col = "red")
+plotmeans(Market_cap ~ Company, 
+          main = paste("Heterogeneity across large-sized companies"),
+          data = panel_data_balanced_large, n.label = FALSE, ylab = "Market Capitalization (GBP Million)", xlab = "Company",
+          lwd = 3, col = "red")
+
+#Mean throughout Years for MC
+par(mfrow = c(1,1))
+plotmeans(Market_cap ~ Year, main="Heterogeineity across years",
+          data=panel_data_balanced1, n.label= FALSE, ylab = "Market Capitalization (GBP Million)", xlab = "Year"
+          ,lwd = 2 , col="black", barcol = "blue", ccol = "black")
+#Mean throughout Years for EBITD
+plotmeans(EBITD_margin ~ Year, main="Heterogeineity across years",
+          data=panel_data_balanced1, n.label= FALSE, ylab = "EBITD (%)", xlab = "Year"
+          ,lwd = 2 , col="black", barcol = "blue", ccol = "black")
+
+par(mfrow = c(1,1))
+
+plotmeans(Market_cap ~ Year, main="Heterogeineity across years for small companies",
+          data=panel_data_balanced_small, n.label= FALSE, ylab = "Market Capitalization (GBP Million)", xlab = "Year"
+          ,lwd = 2 , col="black", barcol = "blue", ccol = "black")
+plotmeans(Market_cap ~ Year, main="Heterogeineity across years for mid companies",
+          data=panel_data_balanced_mid, n.label= FALSE, ylab = "Market Capitalization", xlab = "Year"
+          ,lwd = 2 , col="black", barcol = "blue", ccol = "black")
+plotmeans(Market_cap ~ Year, main="Heterogeineity across years for large companies",
+          data=panel_data_balanced_large, n.label= FALSE, ylab = "Market Capitalization", xlab = "Year"
+          ,lwd = 2 , col="black", barcol = "blue", ccol = "black")
+
+#weight_micro <- sum(panel_data_balanced_micro$Market_cap)/sum(panel_data_balanced1$Market_cap)
+weight_small <- sum(panel_data_balanced_small$Market_cap)/sum(panel_data_balanced1$Market_cap)
+weight_mid <- sum(panel_data_balanced_mid$Market_cap)/sum(panel_data_balanced1$Market_cap)
+weight_large <- sum(panel_data_balanced_large$Market_cap)/sum(panel_data_balanced1$Market_cap)
+
+weights <- c(weight_small, weight_mid, weight_large)
+categories <- c("Small", "Mid", "Large")
+
+barplot(weights, names.arg = categories, main = "Market Cap Weights by Company Size")
+
+#v_micro<- var(panel_data_balanced_micro$Market_cap)
+v_small <- var(panel_data_balanced_small$Market_cap)
+v_mid <- var(panel_data_balanced_mid$Market_cap)
+v_large <- var(panel_data_balanced_large$Market_cap)
+
+vari_mc<- c( v_small, v_mid, v_large)
+barplot(sqrt(vari_mc), names.arg = categories, main = "Market Cap variance by Company Size")
+
+# Outlier_plots
+panel_data_balanced1_zsc <- panel_data_balanced1 %>%
+  group_by(Company) %>%
+  mutate(z_score_MC = (Market_cap - mean(Market_cap)) / sd(Market_cap))
+
+panel_data_balanced1_zsc <- panel_data_balanced1_zsc %>%
+  group_by(Company) %>%
+  mutate(z_score_EB = (EBITD_margin - mean(EBITD_margin)) / sd(EBITD_margin))
+
+ggplot(data = panel_data_balanced1_zsc, aes(x = Company, y = z_score_EB)) +
+  geom_boxplot() +
+  labs(title = "Box Plot of Z-Scores by Company")
+
+ggplot(data = panel_data_balanced1_zsc, aes(x = Company, y = z_score_MC)) +
+  geom_boxplot() +
+  labs(title = "Box Plot of Z-Scores by Company")
+
+#Summary statistics----------------------------------------------------------------
+
+round(mean(panel_data_balanced1$EBITD_margin),3)
+round(median(panel_data_balanced1$EBITD_margin),3)
+round(sd(panel_data_balanced1$EBITD_margin),3)
+round(min(panel_data_balanced1$EBITD_margin),3)
+round(max(panel_data_balanced1$EBITD_margin),3)
+
+round(mean(panel_data_balanced1$Market_cap),3)
+round(median(panel_data_balanced1$Market_cap),3)
+round(sd(panel_data_balanced1$Market_cap),3)
+round(min(panel_data_balanced1$Market_cap),3)
+round(max(panel_data_balanced1$Market_cap),3)
+
+round(mean(panel_data_balanced1$avg_month_ref_rate),3)
+round(median(panel_data_balanced1$avg_month_ref_rate),3)
+round(sd(panel_data_balanced1$avg_month_ref_rate),3)
+round(min(panel_data_balanced1$avg_month_ref_rate),3)
+round(max(panel_data_balanced1$avg_month_ref_rate),3)
+
+round(mean(panel_data_balanced1$UK_GR),3)
+round(median(panel_data_balanced1$UK_GR),3)
+round(sd(panel_data_balanced1$UK_GR),3)
+round(min(panel_data_balanced1$UK_GR),3)
+round(max(panel_data_balanced1$UK_GR),3)
+
+round(mean(panel_data_balanced1$AvG.annual.VIX.index),3)
+round(median(panel_data_balanced1$AvG.annual.VIX.index),3)
+round(sd(panel_data_balanced1$AvG.annual.VIX.index),3)
+round(min(panel_data_balanced1$AvG.annual.VIX.index),3)
+round(max(panel_data_balanced1$AvG.annual.VIX.index),3)
+
+#----------------------------------------------------------------------------------
+
+# Run the plm model with 0!=AG + EBITD!NA
+
+a <- abs(min(panel_data_balanced1$EBITD_margin))
+b <- abs(min(panel_data_balanced1$UK_GR))
+
+
+firm_effects <- factor(panel_data_balanced1$Company)
+time_effects <- factor(panel_data_balanced1$Year)
+
+panel_data_balanced1$UK_GR_b <-  as.numeric(panel_data_balanced1$UK_GR + b + 1e-10)
+panel_data_balanced1$EBITD_margin_a <-  as.numeric(panel_data_balanced1$EBITD_margin + a + 1e-10)
+
+reg_p <- plm(log(Market_cap) ~  log(EBITD_margin_a)
+             + log(avg_month_ref_rate) + log(UK_GR_b)  + log(AvG.annual.VIX.index) 
+             ,data = panel_data_balanced1, model = "pooling" ,index = c("Company","Year"))
+
+reg_r <- plm(log(Market_cap) ~  log(EBITD_margin_a) + log(avg_month_ref_rate)
+             + log(UK_GR_b)  + log(AvG.annual.VIX.index)
+             ,data = panel_data_balanced1, model = "random" ,index = c("Company","Year"))
+
+reg_f <- plm(log(Market_cap) ~  log(EBITD_margin_a) + log(avg_month_ref_rate) 
+             + log(UK_GR_b)  + log(AvG.annual.VIX.index) 
+             ,data = panel_data_balanced1, model = "within" ,index = c("Company","Year"))
+
+reg_r_t <- plm(log(Market_cap) ~  log(EBITD_margin_a) + log(avg_month_ref_rate)
+             + log(UK_GR_b)  + log(AvG.annual.VIX.index) + time_effects
+             ,data = panel_data_balanced1, model = "random" ,index = c("Company","Year"))
+
+reg_f_t <- plm(log(Market_cap) ~  log(EBITD_margin_a) +  log(avg_month_ref_rate)
+               + log(UK_GR_b) +log(AvG.annual.VIX.index) 
+              + time_effects 
+               ,data = panel_data_balanced1, model = "within" ,index = c("Company","Year"))
+
+reg_p_f_t <- plm(log(Market_cap) ~  log(EBITD_margin_a) + log(avg_month_ref_rate)
+                 + log(UK_GR_b)  + log(AvG.annual.VIX.index)
+                 + firm_effects + time_effects 
+             ,data = panel_data_balanced1, model = "pooling" ,index = c("Company","Year"))
+
+summary(reg_f)
+summary(reg_r)
+summary(reg_r_t)
+summary(reg_f_t)
+summary(reg_p_f_t)
+
+# Test for time-fixed effects
+F_T <- pFtest(reg_f_t, reg_f) #Use time-fixed effects
+round(F_T$p.value, 3 )
+lm_T <- plmtest(reg_f, c("time"), type=("bp")) #Use time-fixed effects
+round(lm_T$p.value, 3 )
+# Test for fixed or random effects
+hausman <- phtest(reg_f, reg_r)
+print(hausman) #fixed effects at 10%
+round(hausman$p.value,3)
+hausman_t <- phtest(reg_f_t, reg_r_t)
+print(hausman_t$p.value) #fixed effects at 10%
+
+#Diagnostic tests
+
+BP_test_Rand_effects <- plmtest(reg_p_f_t, type=c("bp"))
+print(BP_test_Rand_effects) #random effect is valid vs OLS
+
+lm <- pcdtest(reg_f_t, test = c("lm"))
+print(lm) #cross-sectional dependence is present
+
+cd<- pcdtest(reg_f_t, test = c("cd"))
+print(cd) #cross-sectional dependence is not present
+
+serial <- pbgtest(reg_f_t)
+print(serial) #Serial correlation is present
+
+adf <- adf.test(panel_data_balanced1$Market_cap, k=2)
+print(adf) #stationary
+adf <- adf.test(panel_data_balanced1$EBITD_margin_a, k=2)
+print(adf) #stationary
+
+bp_homo <- bptest(log(Market_cap) ~  log(EBITD_margin_a) + log(avg_month_ref_rate)
+                  + log(UK_GR_b)  + log(AvG.annual.VIX.index)
+                  + firm_effects + time_effects 
+                  ,data = panel_data_balanced1, studentize=F)
+print(bp_homo) # Heteroskedasticity
+
+lbq1= Box.test(reg_f_t$resid, lag=40, type="Ljung-Box")
+lbq1$p.value
+
+
+# Heteroskedasticity consistent coefficients
+coeftest(reg_f_t)
+coeftest(reg_f_t, vcovHC) 
+coeftest(reg_f_t, vcovHC(reg_f_t, type = "HC0"))
+
+
+stargazer(reg_f_t, "text")
+acf(reg_f_t$residuals, lag.max = 30, main= "Residuals")
+pacf(reg_f_t$residuals, main= "Residuals", lag.max = 14)
+coefplot(reg_f_t)
+residuals <- residuals(reg_f_t)
+qqnorm(residuals, pch = 1, frame = FALSE, main = 'Residuals')
+qqline(residuals, col = "red", lwd = 2)
+
+#Blinder-Oaxaca------------------------------------------------------------------
+
+oaxaca.results.1 <- oaxaca(log(Market_cap) ~  log(EBITD_margin_a) +
+                              log(UK_GR_b)  +log(avg_month_ref_rate) + log(AvG.annual.VIX.index)
+                             | Large_dummy, 
+                           data = panel_data_balanced1, R = 30)
+print(oaxaca.results.1)
+oaxaca.results.1$threefold$overall
+round(oaxaca.results.1$threefold$variables,3)
+oaxaca.results.1$twofold$overall
+oaxaca.results.1$twofold
+plot(oaxaca.results.1)
+plot(oaxaca.results.1, decomposition = "twofold", group.weight = -1)
+summary(oaxaca.results.1$reg$reg.pooled.2)
+
+
+#---------------------------------------------------------------------------------------------------------------------------------
