@@ -1,0 +1,95 @@
+rm(list = ls())
+setwd("C:/Users/Mohamed/Desktop/Desktop/Job search/Jobs applied to after Manchester/Stanford/King")
+library(gplots)
+library(ggplot2)
+library(dplyr)
+library(plm)
+library(haven)
+#0 Load Data ---------------------------------------------------------------------------------------------------------------------------------
+indv_surv<- read_dta("individual_survey.dta")
+listing_surv <- read_dta("listing_survey.dta")
+#1 Verifying no duplicates ---------------------------------------------------------------------------------------------------------------------------------
+
+dupl <- as.data.frame(duplicated(indv_surv$uniq_indiv_id_csv))
+dupl <- replace(dupl, dupl == TRUE , 1)
+dupl <- replace(dupl, dupl == FALSE , 0)
+plot(dupl$`duplicated(indv_surv$uniq_indiv_id_csv)`, type = "l" )
+
+#2 Recoding Gender such that Male = 1 and Female = 0 ---------------------------------------------------------------------------------------------------------------------------------
+
+#indv_surv1 <- replace(indv_surv, data$in3 == "MALE" , 1) #It is already in that form
+#indv_surv1 <- replace(indv_surv, data$in3 == "FEMALE" , 0) #It is already in that form
+
+#3 Creating a dummy variable for each employment category ---------------------------------------------------------------------------------------------------------------------------------
+
+indv_surv$sal <- indv_surv$e1 == 1 
+indv_surv$sal <- ifelse(indv_surv$sal != 1, 0, indv_surv$sal)
+
+indv_surv$appr <- ifelse(indv_surv$e1 == 2, 1, 0)
+
+indv_surv$occ_w <- ifelse(indv_surv$e1 == 3, 1, 0)
+
+indv_surv$sel_e <- ifelse(indv_surv$e1 == 4, 1, 0)
+
+indv_surv$farm <-  ifelse(indv_surv$e1 == 6, 1, 0)
+
+indv_surv$unlabeled <- ifelse(is.na(indv_surv$e1), 1, 0)
+
+#4 Creating a dummy variable equal to 1 if subscribed to CMU ---------------------------------------------------------------------------------------------------------------------------------
+
+indv_surv$subcr <-  ifelse(indv_surv$cmu6 == 2, 1, 0)
+indv_surv$subcr[is.na(indv_surv$subcr)] <- 0
+
+#5 Creating a dummy variable equal to 1 if heard about CMU ---------------------------------------------------------------------------------------------------------------------------------
+
+# cmu9 Already covers that
+
+#6 Saving dataset ---------------------------------------------------------------------------------------------------------------------------------
+write.csv(indv_surv, "Individual_survey_manipulated.csv", row.names = FALSE)
+
+
+#7 Regressing CMU subscription on treatment ---------------------------------------------------------------------------------------------------------------------------------
+location_effects <- factor(indv_surv$bi5)
+
+reg <- plm(cmu6 ~ indv_surv$Treatment + location_effects  ,model= "pooling", data = indv_surv)
+summary(reg)
+#Comment1: Pooled OLS model was assumed to reflect the underlying process.
+#Comment2: The treatment variable reported a positive coefficient of 0.104, indicating a direct relationship between CMU subscription and treatment.
+#Comment3: With a p-value higher than 0.10, the estimated relationship fails to hold statistical significance.
+
+#8 Regressing CMU information delivery on subscription rate  ---------------------------------------------------------------------------------------------------------------------------------
+reg1 <- plm(subcr ~ indv_surv$Treatment , model = "within", effect = "individual", index = "in43", data = indv_surv)
+summary(reg1)
+
+#Comment1: I estimated a conditional fixed effect model, using the respondent being the head of household as the condition.
+#Comment2: Results show that Treatment has a direct and positive relationship with subscription rates, with an estimated magnitude of 0.013. 
+#Comment3: With a p-value lower than 0.10 and higher than 0.05, the estimated relationship successfully holds statistical significance in using a 10% confidence interval, while fails to do so at the 5% level.
+
+#9 Merging datsets  ---------------------------------------------------------------------------------------------------------------------------------
+
+merged_dataset <- merge(indv_surv, listing_surv, 
+                        by.x = "uniq_indiv_id_csv", by.y = "uniq_indiv_id_csv", all = TRUE)
+write.csv(merged_dataset, "merged_survey.csv", row.names = FALSE)
+
+heard_data_set <- filter(merged_dataset, cmu9 == 1)
+
+AVG_number <- mean(heard_data_set$nb_adult_bi18)
+
+#10 Merging datsets  ---------------------------------------------------------------------------------------------------------------------------------
+
+heard_data_set_Abidj <- filter(heard_data_set, heard_data_set$abidjan_only == 1)
+
+# Calculate the average number of respondents who have heard of CMU by treatment status
+
+vg_heard_cmu <- aggregate(nb_adult_bi18 ~ Treatment, heard_data_set_Abidj, mean)
+
+# Create a bar chart
+ggplot(vg_heard_cmu, aes(x = factor(Treatment), y = nb_adult_bi18, fill = factor(Treatment))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Average Number of Respondents Heard of CMU by Treatment Status (Abidjan Only)",
+       x = "Treatment Status",
+       y = "Average Number of Respondents") +
+  scale_fill_manual(values = c("0" = "blue", "1" = "red"))  # Adjust colors as needed
+
+
+#Comment1: In Abidjan, it seems that treatment and control groups heard about CMU in Abidjan, regardless of treatment.
