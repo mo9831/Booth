@@ -1,0 +1,325 @@
+rm(list = ls())
+setwd("C:/Users/Mohamed/Desktop/Desktop/Job search/Jobs applied to after Manchester/Booth/Real Task")
+library(gplots)
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(magrittr)
+library(ggpubr)
+library(oaxaca)
+
+#Load Data ---------------------------------------------------------------------------------------------------------------------------------
+SCF <- read.csv("RA_21_22.csv")
+
+#1) Calculating Wealth ---------------------------------------------------------------------------------------------------------------------------------
+SCF$Wealth <- SCF$asset_total - SCF$debt_total
+
+SCF_1 <- SCF
+
+#Filtering data using education ---------------------------------------------------------------------------------------------------------------------------------
+SCF_C <- SCF_1 %>%
+  filter(SCF_1$education == "college degree")
+SCF_SC <- SCF_1 %>%
+  filter(SCF_1$education == "some college")
+SCF_NC <- SCF_1 %>%
+  filter(SCF_1$education == "no college")
+
+#Calculating median wealth by year for households with college education ---------------------------------------------------------------------------------------------------------------------------------
+median_by_year_C <- SCF_C %>%
+  group_by(year) %>%
+  summarize(median_wealth = median(Wealth))
+
+par(mfrow = c(3, 2))
+
+plot(median_by_year_C, type = "l", col= "red",main = paste("Median Wealth of Households With College Education"), lwd = 3,
+      ylab = "Wealth (USD)", xlab = "Year")
+plotmeans(Wealth ~ year , 
+          main = paste("Mean Wealth of Households With College Education"),
+          data = SCF_C, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black",digits = 10)
+
+#Calculating median wealth by year for households with some college education ---------------------------------------------------------------------------------------------------------------------------------
+
+median_by_year_SC <- SCF_SC %>%
+  group_by(year) %>%
+  summarize(median_wealth = median(Wealth))
+
+plot(median_by_year_SC, type = "l", col= "red",main = paste("Median Wealth of Households With Some College Education"), lwd = 3,
+     ylab = "Wealth (USD)", xlab = "Year")
+plotmeans(Wealth ~ year , 
+          main = paste("Mean Wealth of Households with Some College Education"),
+          data = SCF_SC, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black")
+
+#Calculating median wealth by year for households with no College education ---------------------------------------------------------------------------------------------------------------------------------
+median_by_year_NC <- SCF_NC %>%
+  group_by(year) %>%
+  summarize(median_wealth = median(Wealth))
+
+plot(median_by_year_NC, type = "l", col= "red",main = paste("Median Wealth of Households Without College Education"), lwd = 3,
+     ylab = "Wealth (USD)", xlab = "Year")
+plotmeans(Wealth ~ year , 
+          main = paste("Mean Wealth of Households Without College Education"),
+          data = SCF_SC, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black")
+
+#Filtering data using race ---------------------------------------------------------------------------------------------------------------------------------
+SCF_W <- SCF_1 %>%
+  filter(SCF_1$race == "white")
+SCF_B <- SCF_1 %>%
+  filter(SCF_1$race == "black")
+SCF_O <- SCF_1 %>%
+  filter(SCF_1$race == "other")
+
+#Calculating and plotting median wealth by year for white households ---------------------------------------------------------------------------------------------------------------------------------
+median_by_year_W <- SCF_W %>%
+  group_by(year) %>%
+  summarize(median_wealth = median(Wealth))
+
+par(mfrow = c(3, 2))
+plot(median_by_year_W, type = "l", col= "red",main = paste("Median Wealth of White Households"), lwd = 3,
+     ylab = "Wealth (USD)", xlab = "Year")
+plotmeans(Wealth ~ year , 
+          main = paste("Mean Wealth of White Households"),
+          data = SCF_W, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black")
+
+#Calculating and plotting median wealth by year for black households ---------------------------------------------------------------------------------------------------------------------------------
+median_by_year_b <- SCF_B %>%
+  group_by(year) %>%
+  summarize(median_wealth = median(Wealth))
+
+plot(median_by_year_b, type = "l", col= "red",main = paste("Median Wealth of Black Households"), lwd = 3,
+     ylab = "Wealth (USD)", xlab = "Year")
+plotmeans(Wealth ~ year , 
+          main = paste("Mean Wealth of Black Households"),
+          data = SCF_B, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black")
+
+#Calculating and plotting median wealth by year for other households ---------------------------------------------------------------------------------------------------------------------------------
+median_by_year_o <- SCF_O %>%
+  group_by(year) %>%
+  summarize(median_wealth = median(Wealth))
+
+plot(median_by_year_o, type = "l", col= "red",main = paste("Median Wealth of Other Households"), lwd = 3,
+     ylab = "Wealth (USD)", xlab = "Year")
+plotmeans(Wealth ~ year , 
+          main = paste("Mean Wealth of Other Households"),
+          data = SCF_O, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black")
+
+#2) Calculating housing Wealth for white and black households ---------------------------------------------------------------------------------------------------------------------------------
+SCF_W$Housing_Wealth <- SCF_W$asset_housing - SCF_W$debt_housing
+
+SCF_B$Housing_Wealth <- SCF_B$asset_housing - SCF_B$debt_housing
+
+#Calculating and plotting median housing wealth by year for white households ---------------------------------------------------------------------------------------------------------------------------------
+
+median_by_year_hous_w <- SCF_W %>%
+  group_by(year) %>%
+  summarize(median_hous_wealth = median(Housing_Wealth))
+
+par(mfrow = c(2, 2))
+plot(median_by_year_hous_w, type = "l", col= "red",main = paste("Median Housing Wealth of White Households"), lwd = 3,
+     ylab = "Housing Wealth (USD)", xlab = "Year")
+plotmeans(Housing_Wealth ~ year , 
+          main = paste("Mean Housing Wealth of White Households"),
+          data = SCF_W, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black")
+
+#Calculating and plotting median housing wealth by year for black households ---------------------------------------------------------------------------------------------------------------------------------
+
+median_by_year_hous_b <- SCF_B %>%
+  group_by(year) %>%
+  summarize(median_hous_wealth = median(Housing_Wealth))
+
+plot(median_by_year_hous_b, type = "l", col= "red",main = paste("Median Housing Wealth of Black Households"), lwd = 3,
+     ylab = "Housing Wealth (USD)", xlab = "Year")
+plotmeans(Housing_Wealth ~ year , 
+          main = paste("Mean Housing Wealth of Black Households"),
+          data = SCF_B, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black")
+
+#3) Filtering Wealth for white and black homeowners aged 25>= ---------------------------------------------------------------------------------------------------------------------------------
+SCF_W_hom_25 <- SCF_W %>%
+  filter(SCF_W$asset_housing != 0 & SCF_W$age >= 25 )
+SCF_B_hom_25 <- SCF_B %>%
+  filter(SCF_B$asset_housing != 0 & SCF_B$age >= 25 )
+
+#Calculating and plotting median wealth by year for white homeowners aged 25>= ---------------------------------------------------------------------------------------------------------------------------------
+median_by_year_W_hom25 <- SCF_W_hom_25 %>%
+  group_by(year) %>%
+  summarize(median_wealth_hom25 = median(Wealth))
+
+par(mfrow = c(2, 2))
+plot(median_by_year_W_hom25, type = "l", col= "red",main = paste("Median Wealth of White Homeowners age 25 or older"), lwd = 3,
+     ylab = "Wealth (USD)", xlab = "Year")
+plotmeans(Wealth ~ year , 
+          main = paste("Median Wealth of White Homeowners age 25 or older"),
+          data = SCF_W_hom_25, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black")
+
+#Calculating and plotting median wealth by year for black homeowners aged 25>= ---------------------------------------------------------------------------------------------------------------------------------
+median_by_year_B_hom25 <- SCF_B_hom_25 %>%
+  group_by(year) %>%
+  summarize(median_wealth_hom25 = median(Wealth))
+
+plot(median_by_year_B_hom25, type = "l", col= "red",main = paste("Median Wealth of Black Homeowners age 25 or older"), lwd = 3,
+     ylab = "Wealth (USD)", xlab = "Year")
+plotmeans(Wealth ~ year , 
+          main = paste("Median Wealth of Black Homeowners age 25 or older"),
+          data = SCF_B_hom_25, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black")
+
+#Calculating and plotting median housing wealth by year for white homeowners aged 25>= ---------------------------------------------------------------------------------------------------------------------------------
+median_by_year_W_hous_hom25 <- SCF_W_hom_25 %>%
+  group_by(year) %>%
+  summarize(median_wealth_hous_hom25 = median(Housing_Wealth))
+
+par(mfrow = c(2, 2))
+plot(median_by_year_W_hous_hom25, type = "l", col= "red",main = paste("Median Housing Wealth of White Homeowners age 25 or older"), lwd = 3,
+     ylab = "Wealth (USD)", xlab = "Year")
+plotmeans(Housing_Wealth ~ year , 
+          main = paste("Median Housing Wealth of White Homeowners age 25 or older"),
+          data = SCF_W_hom_25, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black")
+
+#Calculating and plotting median housing wealth by year for black homeowners aged 25>= ---------------------------------------------------------------------------------------------------------------------------------
+median_by_year_B_hous_hom25 <- SCF_B_hom_25 %>%
+  group_by(year) %>%
+  summarize(median_wealth_hous_hom25 = median(Housing_Wealth))
+
+plot(median_by_year_B_hous_hom25, type = "l", col= "red",main = paste("Median Housing Wealth of Black Homeowners age 25 or older"), lwd = 3,
+     ylab = "Wealth (USD)", xlab = "Year")
+plotmeans(Housing_Wealth ~ year , 
+          main = paste("Median Housing Wealth of Black Homeowners age 25 or older"),
+          data = SCF_B_hom_25, n.label = FALSE, ylab = "Wealth (USD)", xlab = "Year",
+          lwd = 3, col = "Black")
+
+#Creating empty matrices for difference and normalized difference of total wealth of white Homeowners age 25 or older ---------------------------------------------------------------------------------------------------------------------------------
+difference_median_wealth_hom25_W <- data.frame(Year= median_by_year_W_hom25$year[2:10], "Change in median wealth" = 0)
+norm_difference_median_wealth_hom25_W <- data.frame(Year= median_by_year_W_hom25$year[1:10], "Normalized Change in median wealth" = 0)
+
+# Loop through the years and calculate differences
+for (i in 1:9)  {
+    difference_median_wealth_hom25_W[i,2] <- median_by_year_W_hom25[i+1, 2] - median_by_year_W_hom25[i, 2]
+}
+# Loop through the years and calculate normalized differences
+for (i in 1:10)  {
+  norm_difference_median_wealth_hom25_W[i,2] <- (median_by_year_W_hom25[i, 2] / median_by_year_W_hom25[1, 2])-1
+}
+
+#Creating empty matrices for difference and normalized difference of total wealth of black Homeowners age 25 or older ---------------------------------------------------------------------------------------------------------------------------------
+difference_median_wealth_hom25_B <- data.frame(Year= median_by_year_B_hom25$year[2:10], "Change in median housing wealth" = 0)
+norm_difference_median_wealth_hom25_B <- data.frame(Year= median_by_year_B_hom25$year[1:10], "Normalized Change in median housing wealth" = 0)
+
+# Loop through the years and calculate differences
+for (i in 1:9)  {
+  difference_median_wealth_hom25_B[i,2] <- median_by_year_B_hom25[i+1, 2] - median_by_year_B_hom25[i, 2]
+}
+# Loop through the years and calculate normalized differences
+for (i in 1:10)  {
+  norm_difference_median_wealth_hom25_B[i,2] <- (median_by_year_B_hom25[i, 2] / median_by_year_B_hom25[1, 2])-1
+}
+
+#Plotting differences and normalized differences of median total wealth of White Homeowners age 25 or older
+plot(difference_median_wealth_hom25_W, type = "l", col= "red",main = paste("Change of Median Wealth of White Homeowners age 25=<"), lwd = 3,
+     ylab = "Change (USD)", xlab = "Year")
+plot(norm_difference_median_wealth_hom25_W, type = "l", col= "red",main = paste("Normalized Change"), lwd = 3,
+     ylab = "Change (%)", xlab = "Year")
+
+#Plotting differences and normalized differences of median total wealth of black Homeowners age 25 or older
+plot(difference_median_wealth_hom25_B, type = "l", col= "blue",main = paste("Change of Median Wealth of black Homeowners age 25=<"), lwd = 3,
+     ylab = "Change (USD)", xlab = "Year")
+plot(norm_difference_median_wealth_hom25_B, type = "l", col= "blue",main = paste("Normalized Change"), lwd = 3,
+     ylab = "Change (%)", xlab = "Year")
+
+#Creating empty matrices for difference and normalized difference of housing wealth of white Homeowners age 25 or older ---------------------------------------------------------------------------------------------------------------------------------
+difference_median_wealth_hous_hom25_W <- data.frame(Year= median_by_year_W_hous_hom25$year[2:10], "Change in median housing wealth" = 0)
+norm_difference_median_wealth_hous_hom25_W <- data.frame(Year= median_by_year_W_hous_hom25$year[1:10], "Normalized Change in median housing wealth" = 0)
+
+# Loop through the years and calculate differences
+for (i in 1:9)  {
+  difference_median_wealth_hous_hom25_W[i,2] <- median_by_year_W_hous_hom25[i+1, 2] - median_by_year_W_hous_hom25[i, 2]
+}
+# Loop through the years and calculate normalized differences
+for (i in 1:10)  {
+  norm_difference_median_wealth_hous_hom25_W[i,2] <- (median_by_year_W_hous_hom25[i, 2] / median_by_year_W_hous_hom25[1, 2])-1
+}
+
+#Creating empty matrices for difference and normalized difference of housing wealth of black Homeowners age 25 or older ---------------------------------------------------------------------------------------------------------------------------------
+difference_median_wealth_hous_hom25_B <- data.frame(Year= median_by_year_B_hous_hom25$year[2:10], "Change in median housing wealth" = 0)
+norm_difference_median_wealth_hous_hom25_B <- data.frame(Year= median_by_year_B_hous_hom25$year[1:10], "Normalized Change in median housing wealth" = 0)
+
+# Loop through the years and calculate differences
+for (i in 1:9)  {
+  difference_median_wealth_hous_hom25_B[i,2] <- median_by_year_B_hous_hom25[i+1, 2] - median_by_year_B_hous_hom25[i, 2]
+}
+# Loop through the years and calculate normalized differences
+for (i in 1:10)  {
+  norm_difference_median_wealth_hous_hom25_B[i,2] <- (median_by_year_B_hous_hom25[i, 2] / median_by_year_B_hous_hom25[1, 2])-1
+}
+
+#Plotting differences and normalized differences of median housing wealth of White Homeowners age 25 or older
+plot(difference_median_wealth_hous_hom25_W, type = "l", col= "red",main = paste("Change of Median Housing Wealth of White Homeowners age 25=<"), lwd = 3,
+     ylab = "Change (USD)", xlab = "Year")
+plot(norm_difference_median_wealth_hous_hom25_W, type = "l", col= "red",main = paste("Normalized Change"), lwd = 3,
+     ylab = "Change (%)", xlab = "Year")
+
+#Plotting differences and normalized differences of median housing wealth of black Homeowners age 25 or older
+plot(difference_median_wealth_hous_hom25_B, type = "l", col= "blue",main = paste("Change of Median Housing Wealth of Black Homeowners age 25=<"), lwd = 3,
+     ylab = "Change (USD)", xlab = "Year")
+plot(norm_difference_median_wealth_hous_hom25_B, type = "l", col= "blue",main = paste("Normalized Change"), lwd = 3,
+     ylab = "Change (%)", xlab = "Year")
+
+#4)Calculating housing assets relative to total asset holdings------------------------------------------------------------------
+
+SCF_W$housing_asset_ratio <- SCF_W$asset_housing/ SCF_W$asset_total
+
+SCF_W_ratio <- SCF_W %>%
+  filter(SCF_W$housing_asset_ratio != is.nan(NaN))
+
+
+SCF_B$housing_asset_ratio <- SCF_B$asset_housing/ SCF_B$asset_total
+
+SCF_B_ratio <- SCF_B %>%
+  filter(SCF_B$housing_asset_ratio != is.nan(NaN))
+
+
+par(mfrow = c(1, 2))
+plotmeans(housing_asset_ratio ~ year , 
+          main = paste("Mean ratio of Housing to Total Assets of White Households"),
+          data = SCF_W_ratio, n.label = FALSE, ylab = "Ratio", xlab = "Year",
+          lwd = 3, col = "Black")
+plotmeans(housing_asset_ratio ~ year , 
+          main = paste("Mean ratio of Housing to Total Assets of Black Households"),
+          data = SCF_B_ratio, n.label = FALSE, ylab = "Ratio", xlab = "Year",
+          lwd = 3, col = "Black")
+
+# Blinder-Oaxaca------------------------------------------------------------------
+
+SCF_W_B <- SCF_1 %>%
+  filter(SCF_1$race == "white" | SCF_1$race == "black")
+SCF_W_B <- SCF_W_B %>%
+  filter(SCF_W_B$education != "some college")
+
+SCF_W_B$race <- replace(SCF_W_B$race, SCF_W_B$race == "white", 0)
+SCF_W_B$race <- replace(SCF_W_B$race, SCF_W_B$race == "black", 1)
+
+SCF_W_B$sex <- replace(SCF_W_B$sex, SCF_W_B$sex == "male", 1)
+SCF_W_B$sex <- replace(SCF_W_B$sex, SCF_W_B$sex == "female", 0)
+
+SCF_W_B$education <- replace(SCF_W_B$education, SCF_W_B$education == "college degree", 1)
+SCF_W_B$education <- replace(SCF_W_B$education, SCF_W_B$education == "no college", 0)
+
+oaxaca.results <- oaxaca(Wealth ~ income + education + age + sex | race , 
+                           data = SCF_W_B, R = 30)
+print(oaxaca.results)
+oaxaca.results$threefold$overall
+summary(oaxaca.results$reg$reg.pooled.2)$coefficients
+round(oaxaca.results$threefold$variables,3)
+oaxaca.results$twofold$overall
+oaxaca.results$twofold
+plot(oaxaca.results)
+plot(oaxaca.results, decomposition = "twofold", group.weight = -1)
+summary(oaxaca.results$reg$reg.pooled.2)
