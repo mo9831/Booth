@@ -1,0 +1,538 @@
+rm(list = ls())
+setwd("C:/Users/Mohamed/Desktop/Desktop/Job search/Jobs applied to after Manchester/Booth- Stigler/data")
+library(gplots)
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(magrittr)
+library(ggpubr)
+library(XML)
+library(RCurl)
+library(plm)
+
+# Load Data ---------------------------------------------------------------------------------------------------------------------------------
+state_chrct <- read.csv("state_chars_text.csv")
+indv_don <- read.csv("nonlaw_indivs_donations.csv")
+law_indv_don <- read.csv("lawyers_donations.csv")
+url <- getURL("file:///C:/Users/Mohamed/Desktop/Desktop/Job%20search/Jobs%20applied%20to%20after%20Manchester/Booth-%20Stigler/data/law_firms_donations.html")
+url1 <- ("file:///C:/Users/Mohamed/Desktop/Desktop/Job%20search/Jobs%20applied%20to%20after%20Manchester/Booth-%20Stigler/data/nonlaw_firms_donations.html")
+law_firms_don <- as.data.frame(readHTMLTable(url))
+firms_don <- as.data.frame(readHTMLTable(url1))
+
+# 1)a) Create a binding_commission column with 1 if interim column includes"A vacancy on the supreme court is filled by gubernatorial appointment." and zero otherwise ---------------------------------------
+
+state_chrct$binding_commission <- ifelse(grepl("A vacancy on the supreme court is filled by gubernatorial appointment.", state_chrct$interim_appointment_method, ignore.case = TRUE), 1, 0)
+# Montana confirms using a simple majority
+state_chrct$binding_commission[10] <- 0
+# Missing "THE" requires manually setting NC to 1
+state_chrct$binding_commission[11:12] <- 1
+
+# PA, TN, and TX do wait for confirmation on governor's pick 
+state_chrct$binding_commission[18:20] <- 0
+
+# b)Create a partisan election column with 0 if first_term_method column includes "non-" and 1 otherwise ---------------------------------------
+state_chrct$partisan_election <- ifelse(grepl("non-", state_chrct$first_term_method, ignore.case = TRUE), 0, 1)
+
+# TN is ambiguous
+state_chrct$partisan_election[19] <- "NaN"
+#Should include NC as non-partisan because for most years it has been.
+
+# c)Create a partisan election column with 1 if additional_term_method column includes "retention" and 0 otherwise ---------------------------------------
+state_chrct$retention <- ifelse(grepl("retention", state_chrct$additional_term_method, ignore.case = TRUE), 1, 0)
+
+state_chrct_1<- state_chrct[,2:3]
+state_chrct_1$binding_commission<- state_chrct$binding_commission
+state_chrct_1$partisan_election<- state_chrct$partisan_election
+state_chrct_1$retention<- state_chrct$retention
+write.csv(state_chrct_1, file = "state_chrct_cleaned.csv", row.names = FALSE)
+# 2)---------------------------------------------------------------------------------------------------------------
+#Compute statistics only for individuals
+
+# Filter state_chrct for term_length == 6
+state_chrct_term_6 <- state_chrct %>%
+  filter(term_length == 6)
+
+# Create a data frame for the selected state names
+State_term_6 <- as.data.frame(state_chrct_term_6$state_name)
+colnames(State_term_6) <- c("state_name")
+
+#Clean data from negative and zero amounts given their unclear nature
+#indv_don <- subset(indv_don, amount > 0)
+
+# Filter indv_don for specific states
+indv_don_term_6 <- indv_don %>%
+  filter(state_name %in% c("Alabama", "Georgia", "Idaho", "Minnesota", "Nevada", "Ohio",
+                           "Oregon", "Pennsylvania", "Texas", "Washington"))
+
+# Calculate the minimum donation by state for a 6-year term
+min_don_by_state <- indv_don_term_6 %>%
+  group_by(state_name) %>%
+  summarize(minimum_donation = min(amount))
+
+# Calculate the maximum donation by state for a 6-year term
+max_don_by_state <- indv_don_term_6 %>%
+  group_by(state_name) %>%
+  summarize(maximum_donation = max(amount))
+
+# Calculate the median of donations by state for a 6-year term
+median_don_by_state <- indv_don_term_6 %>%
+  group_by(state_name) %>%
+  summarize(median_donation = median(amount))
+
+# Calculate the interquartile range (IQR) of donations by state for a 6-year term
+IQR_don_by_state <- indv_don_term_6 %>%
+  group_by(state_name) %>%
+  summarize(IQR_donation = IQR(amount))
+
+# Calculate the mean donation by state for a 6-year term
+mean_don_by_state <- indv_don_term_6 %>%
+  group_by(state_name) %>%
+  summarize(mean_donation = mean(amount))
+
+# Create the summary data frame
+summary_stat_indv <- as.data.frame(cbind(min_don_by_state$state_name,min_don_by_state$minimum_donation,
+                      max_don_by_state$maximum_donation,median_don_by_state$median_donation,
+                       IQR_don_by_state$IQR_donation,round(mean_don_by_state$mean_donation,2)))
+
+colnames(summary_stat_indv) <- c("state_name","minimum_donation","maximum_donation","median_donation",
+                            "IQR_donation","mean_donation")
+#-------------------------------------------------------------------------------------
+#Clean data from negative and zero amounts given their unclear nature
+#law_indv_don <- subset(law_indv_don, amount > 0)
+
+# Filter law_indv_don for specific states
+law_indv_don_term_6 <- law_indv_don %>%
+  filter(state_name %in% c("ALABAMA", "GEORGIA", "IDAHO", "MINNESOTA", "NEVADA", "OHIO",
+                           "OREGON", "PENNSYLVANIA", "TEXAS", "WASHINGTON"))
+
+# Calculate the minimum donation by state for a 6-year term
+min_don_by_state_indvlaw <- law_indv_don_term_6 %>%
+  group_by(state_name) %>%
+  summarize(minimum_donation = min(amount))
+
+# Calculate the maximum donation by state for a 6-year term
+max_don_by_state_indvlaw <- law_indv_don_term_6 %>%
+  group_by(state_name) %>%
+  summarize(maximum_donation = max(amount))
+
+# Calculate the median of donations by state for a 6-year term
+median_don_by_state_indvlaw <- law_indv_don_term_6 %>%
+  group_by(state_name) %>%
+  summarize(median_donation = median(amount))
+
+# Calculate the interquartile range (IQR) of donations by state for a 6-year term
+IQR_don_by_state_indvlaw <- law_indv_don_term_6 %>%
+  group_by(state_name) %>%
+  summarize(IQR_donation = IQR(amount))
+
+# Calculate the mean donation by state for a 6-year term
+mean_don_by_state_indvlaw <- law_indv_don_term_6 %>%
+  group_by(state_name) %>%
+  summarize(mean_donation = mean(amount))
+
+# Create the summary data frame
+summary_stat_indv_law <- as.data.frame(cbind(min_don_by_state_indvlaw$state_name,min_don_by_state_indvlaw$minimum_donation,
+                                         max_don_by_state_indvlaw$maximum_donation,median_don_by_state_indvlaw$median_donation,
+                                         IQR_don_by_state_indvlaw$IQR_donation,round(mean_don_by_state_indvlaw$mean_donation,2)))
+colnames(summary_stat_indv_law) <- c("state_name","minimum_donation","maximum_donation","median_donation",
+                                 "IQR_donation","mean_donation")
+#3)---------------------------------------------------------------------------------------------------------------
+# removing NULL from col names
+# colnames(law_firms_don) <- sub("^.{5}", "", colnames(law_firms_don))
+
+law_firms_don_OH <- law_firms_don %>%
+  filter(NULL.state_name == "OHIO")
+
+# Computing top donors
+top_donors_lawf_OH <- law_firms_don_OH %>%
+  group_by(NULL.contributor) %>%
+  summarise(total_donations = sum(as.numeric(NULL.amount))) %>%
+  arrange(desc(total_donations)) %>%
+  top_n(12)
+
+# Adjusting headings and removing NaN total
+colnames(top_donors_lawf_OH) <- c("Contributor","total_donations")
+NaN_total <- top_donors_lawf_OH[1,]
+top_donors_lawf_OH <- top_donors_lawf_OH[-1,]
+
+#4)---------------------------------------------------------------------------------------------------------------
+# Filter state_chrct for retention == 1
+state_reten <- state_chrct %>%
+  filter(retention == 1)
+
+# Create a data frame for the selected state names
+state_reten <- as.data.frame(state_chrct_term_6$state_name)
+colnames(state_reten) <- c("state_name")
+
+# States with term =6 are the same as states with retention elections
+indv_don_reten <- indv_don_term_6
+
+# Filter ind_don_retention for states with contribution >=1
+indv_don_reten_once <- indv_don_reten %>%
+  filter(contribution.count >= 1)
+
+# Computing top individual donors
+top_donors_indv <- indv_don_reten_once %>%
+  group_by(contributor, state_name) %>%
+  summarise(total_donations = sum(as.numeric(amount))) %>%
+  arrange(desc(total_donations))
+
+# Cutting down the table to top 10 
+top_donors_indv <- top_donors_indv[1:10,]
+
+#5)---------------------------------------------------------------------------------------------------------------
+# Individual donors
+
+#Clean data from negative and zero amounts given their unclear nature
+#indv_don <- subset(indv_don, amount > 0)
+
+# Adding institutional characteristics dummy variables into each data set
+indv_don$binding_commission <- ifelse(
+  grepl("Alabama|Arkansas|Georgia|Idaho|Kentucky|Michigan|Minnesota|Montana|North Carolina|North Dakota|Nevada|Ohio|Oregon|Washington|Wisconsin|West Virginia",
+        indv_don$state_name, ignore.case = TRUE), 1,0)
+
+indv_don$partisan_election <- ifelse(
+  grepl("Alabama|Illinois|Louisiana|Pennsylvania|New Mexico|Texas",
+        indv_don$state_name, ignore.case = TRUE), 1, 0)
+
+indv_don$partisan_election <- ifelse(grepl("Carolina", indv_don$state_name, ignore.case = TRUE) & indv_don$election.year < 2004, 1, indv_don$partisan_election)
+
+indv_don$retention <- ifelse(
+  grepl("Illinois|Montana|Pennsylvania|New Mexico|Tennessee",
+        indv_don$state_name, ignore.case = TRUE), 1,0)
+
+# Creating a panel dataset
+indv_don_panel <- pdata.frame(indv_don, c("state_name", "election.year"), row.names = FALSE)
+indv_don_panel$candidate_status_dummy <- ifelse(indv_don_panel$candidate.status == "Won", 1, 0)
+indv_don_panel$incumbent_status_dummy <- ifelse(indv_don_panel$incumbency.status == "Incumbent", 1, 0)
+
+#Calculate Summary Statistics for individual donors
+
+# Calculate the minimum donation by state for individual donors
+min_don_by_state_indv <- indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(minimum_donation = min(amount))
+
+# Calculate the maximum donation by state for 
+max_don_by_state_indv <- indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(maximum_donation = max(amount))
+
+# Calculate the median of donations by state for  individual donors
+median_don_by_state_indv <- indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(median_donation = median(amount))
+
+# Calculate the interquartile range (IQR) of donations by state for  individual donors
+IQR_don_by_state_indv <- indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(IQR_donation = IQR(amount))
+
+# Calculate the mean donation by state for  individual donors
+mean_don_by_state_indv <- indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(mean_donation = mean(amount))
+
+# Calculate the SD donation by state for  individual donors
+sd_don_by_state_indv <- indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(standard_deviation_donation = sd(amount))
+
+# Create the summary data frame
+summary_stat_indv_total <- as.data.frame(cbind(min_don_by_state_indv$state_name,min_don_by_state_indv$minimum_donation,
+                                         max_don_by_state_indv$maximum_donation,median_don_by_state_indv$median_donation,
+                                         IQR_don_by_state_indv$IQR_donation,round(mean_don_by_state_indv$mean_donation,2)
+                                         ,round(sd_don_by_state_indv$standard_deviation_donation,2)))
+
+summary_stat_indv_total[,1] <- min_don_by_state_indv$state_name
+
+colnames(summary_stat_indv_total) <- c("state_name","minimum_donation","maximum_donation","median_donation",
+                                 "IQR_donation","mean_donation","standard_deviation_donation")
+write.csv(indv_don_panel, file = "nonlaw_indivs_donations_cleaned.csv", row.names = FALSE)
+
+
+# Law Individual donors----------------------------------------------------------------------------------------------
+  
+#law_indv_don <- subset(law_indv_don, amount > 0)
+
+law_indv_don$binding_commission <- ifelse(
+  grepl("Alabama|Arkansas|Georgia|Idaho|Kentucky|Michigan|Minnesota|Montana|North Carolina|North Dakota|Nevada|Ohio|Oregon|Washington|Wisconsin|West Virginia",
+        law_indv_don$state_name, ignore.case = TRUE), 1,0)
+
+law_indv_don$partisan_election <- ifelse(
+  grepl("Alabama|Illinois|Louisiana|Pennsylvania|New Mexico|Texas",
+        law_indv_don$state_name, ignore.case = TRUE), 1,0)
+
+law_indv_don$partisan_election <- ifelse(grepl("Carolina", law_indv_don$state_name, ignore.case = TRUE) & law_indv_don$election_year < 2004, 1, law_indv_don$partisan_election)
+
+law_indv_don$retention <- ifelse(
+  grepl("Illinois|Montana|Pennsylvania|New Mexico|Tennessee",
+        law_indv_don$state_name, ignore.case = TRUE), 1,0)
+
+law_indv_don_panel <- pdata.frame(law_indv_don, c("state_name", "election_year"), row.names = FALSE)
+
+law_indv_don_panel$candidate_status_dummy <- ifelse(law_indv_don_panel$candidate_status == "Won", 1, 0)
+law_indv_don_panel$incumbent_status_dummy <- ifelse(law_indv_don_panel$incumbency_status == "Incumbent", 1, 0)
+#Calculate Summary Statistics for lawyer donors
+
+# Calculate the minimum donation by state for  lawyer donors
+min_don_by_state_indvlaw_1 <- law_indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(minimum_donation = min(amount))
+
+# Calculate the maximum donation by state for  lawyer donors
+max_don_by_state_indvlaw_1 <- law_indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(maximum_donation = max(amount))
+
+# Calculate the median of donations by state for  lawyer donors
+median_don_by_state_indvlaw_1 <- law_indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(median_donation = median(amount))
+
+# Calculate the interquartile range (IQR) of donations by state for  lawyer donors
+IQR_don_by_state_indvlaw_1 <- law_indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(IQR_donation = IQR(amount))
+
+# Calculate the mean donation by state for  lawyer donors
+mean_don_by_state_indvlaw_1 <- law_indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(mean_donation = mean(amount))
+
+# Calculate the SD donation by state for  lawyer donors
+sd_don_by_state_indvlaw_1 <- law_indv_don_panel %>%
+  group_by(state_name) %>%
+  summarize(standard_deviation_donation = sd(amount))
+
+# Create the summary data frame
+summary_stat_indvlaw_total <- as.data.frame(cbind(min_don_by_state_indvlaw_1$state_name,min_don_by_state_indvlaw_1$minimum_donation,
+                                               max_don_by_state_indvlaw_1$maximum_donation,median_don_by_state_indvlaw_1$median_donation,
+                                               IQR_don_by_state_indvlaw_1$IQR_donation,round(mean_don_by_state_indvlaw_1$mean_donation,2)
+                                               ,round(sd_don_by_state_indvlaw_1$standard_deviation_donation,2)))
+
+summary_stat_indvlaw_total[,1] <- min_don_by_state_indvlaw_1$state_name
+
+colnames(summary_stat_indvlaw_total) <- c("state_name","minimum_donation","maximum_donation","median_donation",
+                                       "IQR_donation","mean_donation","standard_deviation_donation")
+write.csv(law_indv_don_panel, file = "lawyers_donations_cleaned.csv", row.names = FALSE)
+
+# Law firms donors-----------------------------------------------------------------------------------------------------
+law_firms_don$NULL.amount <- as.numeric(law_firms_don$NULL.amount)
+#law_firms_don <- subset(law_firms_don, NULL.amount > 0)
+
+law_firms_don$binding_commission <- ifelse(
+    grepl("Alabama|Arkansas|Georgia|Idaho|Kentucky|Michigan|Minnesota|Montana|North Carolina
+        |North Dakota|Nevada|Ohio|Oregon|Washington|Wisconsin|West Virginia",
+          law_firms_don$NULL.state_name, ignore.case = TRUE), 1,0)
+
+law_firms_don$partisan_election <- ifelse(
+  grepl("Alabama|Illinois|Louisiana|Pennsylvania|New Mexico|Texas",
+        law_firms_don$NULL.state_name, ignore.case = TRUE), 1,0)
+
+law_firms_don$partisan_election <- ifelse(grepl("Carolina", law_firms_don$NULL.state_name, ignore.case = TRUE) & law_firms_don$NULL.election_year < 2004, 1, law_indv_don$partisan_election)
+
+
+law_firms_don$retention <- ifelse(
+  grepl("Illinois|Montana|Pennsylvania|New Mexico|Tennessee",
+        law_firms_don$NULL.state_name, ignore.case = TRUE), 1,0)
+
+law_firms_don_panel <- pdata.frame(law_firms_don, c("NULL.state_name", "NULL.election_year"), row.names = FALSE)
+law_firms_don_panel$candidate_status_dummy <- ifelse(law_firms_don_panel$NULL.candidate_status == "Won", 1, 0)
+law_firms_don_panel$incumbent_status_dummy <- ifelse(law_firms_don_panel$NULL.incumbency_status == "Incumbent", 1, 0)
+law_firms_don_panel$NULL.amount <- as.numeric(law_firms_don_panel$NULL.amount)
+  
+#Calculate Summary Statistics for legal firm donors
+
+# Calculate the minimum donation by state for  lawyer firm donors
+min_don_by_state_lawf <- law_firms_don_panel %>%
+  group_by(NULL.state_name) %>%
+  summarize(minimum_donation = min(NULL.amount))
+
+# Calculate the maximum donation by state for  lawyer firm donors
+max_don_by_state_lawf <- law_firms_don_panel %>%
+  group_by(NULL.state_name) %>%
+  summarize(maximum_donation = max(NULL.amount))
+
+# Calculate the median of donations by state for  lawyer firm donors
+median_don_by_state_lawf <- law_firms_don_panel %>%
+  group_by(NULL.state_name) %>%
+  summarize(median_donation = median(NULL.amount))
+
+# Calculate the interquartile range (IQR) of donations by state for  lawyer firm donors
+IQR_don_by_state_lawf <- law_firms_don_panel %>%
+  group_by(NULL.state_name) %>%
+  summarize(IQR_donation = IQR(NULL.amount))
+
+# Calculate the mean donation by state for  lawyer firm donors
+mean_don_by_state_lawf <- law_firms_don_panel %>%
+  group_by(NULL.state_name) %>%
+  summarize(mean_donation = mean(NULL.amount))
+
+# Calculate the SD donation by state for  lawyer firm donors
+sd_don_by_state_lawf <- law_firms_don_panel %>%
+  group_by(NULL.state_name) %>%
+  summarize(standard_deviation_donation = sd(NULL.amount))
+
+# Create the summary data frame
+summary_stat_firmlaw_total <- as.data.frame(cbind(min_don_by_state_lawf$NULL.state_name,min_don_by_state_lawf$minimum_donation,
+                                                  max_don_by_state_lawf$maximum_donation,median_don_by_state_lawf$median_donation,
+                                                  IQR_don_by_state_lawf$IQR_donation,round(mean_don_by_state_lawf$mean_donation,2)
+                                                  ,round(sd_don_by_state_lawf$standard_deviation_donation,2)))
+
+summary_stat_firmlaw_total[,1] <- min_don_by_state_lawf$NULL.state_name
+
+colnames(summary_stat_firmlaw_total) <- c("state_name","minimum_donation","maximum_donation","median_donation",
+                                          "IQR_donation","mean_donation","standard_deviation_donation")
+write.csv(law_firms_don_panel, file = "law_firms_donations_cleaned.csv", row.names = FALSE)
+
+# Firms donors------------------------------------------------------------------------------------------------------
+#firms_don <- subset(firms_don, NULL.amount > 0)
+
+firms_don$NULL.amount <- as.numeric(firms_don$NULL.amount)
+
+firms_don$binding_commission <- ifelse(
+    grepl("Alabama|Arkansas|Georgia|Idaho|Kentucky|Michigan|Minnesota|Montana|North Carolina|North Dakota|Nevada|Ohio|Oregon|Washington|Wisconsin|West Virginia",
+          firms_don$NULL.state.name, ignore.case = TRUE), 1,0)
+
+firms_don$partisan_election <- ifelse(
+  grepl("Alabama|Illinois|Louisiana|Pennsylvania|New Mexico|Texas",
+        firms_don$NULL.state.name, ignore.case = TRUE), 1,0)
+
+firms_don$NULL.election.year <- as.numeric(as.character(firms_don$NULL.election.year))
+
+firms_don$partisan_election <- ifelse(grepl("Carolina", firms_don$NULL.state.name, ignore.case = TRUE) & firms_don$NULL.election.year < 2004, 1, firms_don$partisan_election)
+
+firms_don$retention <- ifelse(
+  grepl("Illinois|Montana|Pennsylvania|New Mexico|Tennessee",
+        firms_don$NULL.state.name, ignore.case = TRUE), 1,0)
+
+firms_don <- pdata.frame(firms_don, c("NULL.state.name", "NULL.election.year"), row.names = FALSE)
+firms_don$candidate_status_dummy <- ifelse(firms_don$NULL.candidate_status == "Won", 1, 0)
+firms_don$incumbent_status_dummy <- ifelse(firms_don$NULL.inumbency.status == "Incumbent", 1, 0)
+
+#Calculate Summary Statistics for firm donors
+
+# Calculate the minimum donation by state for  firm donors
+min_don_by_state_f <- firms_don %>%
+  group_by(NULL.state.name) %>%
+  summarize(minimum_donation = min(NULL.amount))
+
+# Calculate the maximum donation by state for  firm donors
+max_don_by_state_f <- firms_don %>%
+  group_by(NULL.state.name) %>%
+  summarize(maximum_donation = max(NULL.amount))
+
+# Calculate the median of donations by state for  firm donors
+median_don_by_state_f <- firms_don %>%
+  group_by(NULL.state.name) %>%
+  summarize(median_donation = median(NULL.amount))
+
+# Calculate the interquartile range (IQR) of donations by state for  firm donors
+IQR_don_by_state_f <- firms_don %>%
+  group_by(NULL.state.name) %>%
+  summarize(IQR_donation = IQR(NULL.amount))
+
+# Calculate the mean donation by state for  firm donors
+mean_don_by_state_f <- firms_don %>%
+  group_by(NULL.state.name) %>%
+  summarize(mean_donation = mean(NULL.amount))
+
+# Calculate the SD donation by state for  firm donors
+sd_don_by_state_f <- firms_don %>%
+  group_by(NULL.state.name) %>%
+  summarize(standard_deviation_donation = sd(NULL.amount))
+
+# Create the summary data frame
+summary_stat_firms_total <- as.data.frame(cbind(min_don_by_state_f$NULL.state.name,min_don_by_state_f$minimum_donation,
+                                                  max_don_by_state_f$maximum_donation,median_don_by_state_f$median_donation,
+                                                  IQR_don_by_state_f$IQR_donation,round(mean_don_by_state_f$mean_donation,2)
+                                                  ,round(sd_don_by_state_f$standard_deviation_donation,2)))
+
+summary_stat_firms_total[,1] <- min_don_by_state_f$NULL.state.name
+
+colnames(summary_stat_firms_total) <- c("state_name","minimum_donation","maximum_donation","median_donation",
+                                          "IQR_donation","mean_donation","standard_deviation_donation")
+write.csv(firms_don, file = "nonlaw_firms_donations_cleaned.csv", row.names = FALSE)
+
+#Plotting amounts by state for each sample--------------------------------------------------------------------------------------------------------- 
+
+par(mfrow=c(2,2))
+plotmeans(amount ~ state_name, 
+            main = paste("Heterogeneity of Individual Donations Across States"),
+            data = indv_don_panel, n.label = FALSE, ylab = "Individual Donations", xlab = "States",
+            lwd = 3, col = "black",cex = 2,las = 2,cex.axis = 0.5,cex.main = 0.7, cex.lab = 0.7)
+plotmeans(amount ~ state_name, 
+          main = paste("Heterogeneity of Individual Lawyers' Donations Across States"),
+          data = law_indv_don_panel, n.label = FALSE, ylab = "Individual Donations", xlab = "States",
+          lwd = 3, col = "black",cex = 2,las = 2,cex.axis = 0.5,cex.main = 0.7, cex.lab = 0.7)
+
+plotmeans(as.numeric(NULL.amount) ~ NULL.state_name, 
+          main = paste("Heterogeneity of Legal Firms' Donations Across States"),
+          data = law_firms_don_panel, n.label = FALSE, ylab = "Individual Donations", xlab = "States",
+          lwd = 3, col = "black",cex = 2,las = 2,cex.axis = 0.5,cex.main = 0.7, cex.lab = 0.7)
+
+plotmeans(as.numeric(NULL.amount) ~ NULL.state.name, 
+          main = paste("Heterogeneity of Firms' Donations Across States"),
+          data = firms_don, n.label = FALSE, ylab = "Individual Donations", xlab = "States",
+          lwd = 3, col = "black",cex = 2,las = 2,cex.axis = 0.5,cex.main = 0.7, cex.lab = 0.7)
+  
+
+# Regression analysis for donation behaviour---------------------------------------------------------------------------------------------------------  
+time_effects <- factor(indv_don_panel$election.year)
+
+reg_idv_don <- plm( amount ~ binding_commission  + partisan_election
+                 + retention + incumbent_status_dummy ,data = indv_don_panel, model = "random" ,
+                 index = "election.year",random.method="walhus")
+reg_idv_don_fixed <- plm( amount ~ binding_commission  + partisan_election
+                    + retention + incumbent_status_dummy ,data = indv_don_panel, model = "within" ,
+                    index = "election.year",random.method="walhus")
+
+phtest(reg_idv_don, reg_idv_don_fixed)
+summary(reg_idv_don)
+
+reg_law_indv_don <- plm( amount ~ binding_commission  + partisan_election +
+                + retention +incumbent_status_dummy ,data = law_indv_don_panel, model = "random" ,
+                index = "election_year",random.method="walhus")
+summary(reg_law_indv_don)
+
+reg_law_firms_don <- plm( as.numeric(NULL.amount) ~ binding_commission  + partisan_election
+                + retention +incumbent_status_dummy ,data = law_firms_don_panel,
+                model = "random" ,index = "NULL.election_year",random.method="walhus")
+summary(reg_law_firms_don)
+
+reg_firms_don <- plm( as.numeric(NULL.amount) ~ binding_commission  + partisan_election
+                          + retention +incumbent_status_dummy ,data = firms_don, model = "random" ,
+                      index = "NULL.election.year",random.method="walhus")
+summary(reg_firms_don)
+
+stargazer(reg_idv_don,
+          reg_law_indv_don,
+          reg_law_firms_don,reg_firms_don)
+#--------------------------------------------------------------------------------------------------------------------
+# Regression analysis for election outcome
+
+reg_idv_out <- plm( candidate_status_dummy ~ amount + contribution.count
+                    + incumbent_status_dummy,
+                    data = indv_don_panel, model = "random" ,index = "election.year",random.method="walhus")
+summary(reg_idv_out)
+
+reg_law_indv_out <- plm( candidate_status_dummy ~ amount + contribution_count
+                         + incumbent_status_dummy,
+                         data = law_indv_don_panel, model = "random" ,index = "election_year",random.method="walhus")
+summary(reg_law_indv_out)
+
+reg_law_firms_out <- plm( candidate_status_dummy ~ as.numeric(NULL.amount) + as.numeric(NULL.contribution_count)
+                          + incumbent_status_dummy,
+                          data = law_firms_don_panel, model = "random" ,index = "NULL.election_year",random.method="walhus")
+summary(reg_law_firms_out)
+
+reg_firms_out <- plm( candidate_status_dummy ~ as.numeric(NULL.amount) + as.numeric(NULL.contribution.count)
+                      + incumbent_status_dummy,
+                      data = firms_don, model = "random" ,index = "NULL.election.year",random.method="walhus")
+summary(reg_firms_out)
+
+
+stargazer(reg_idv_out,
+          reg_law_indv_out,
+          reg_law_firms_out,reg_firms_out)
