@@ -1,0 +1,188 @@
+rm(list = ls())
+setwd("C:/Users/Mohamed/Desktop/Desktop/Job search/Jobs applied to after Manchester/Stanford/Chan/data exercise")
+library(gplots)
+library(ggplot2)
+library(dplyr)
+library(magrittr)
+library(plm)
+library(coefplot)
+
+# Load Data ---------------------------------------------------------------------------------------------------------------------------------
+#Make sure to change the format of arrive and leave to dd-mm-yy hh:mm 
+ED_Data <- read.csv("test_data.csv")
+ 
+# 0) ---------------------------------------------------------------------------------------------------------------------------------
+# Explore the data
+print(str(ED_Data))
+print(summary(ED_Data))
+
+# Check for data entry errors
+# Check for non-corresponding shift date and patient arrival date
+ED_Data$SH_DT <- as.data.frame(substr(ED_Data$shift_date, 1, 2))
+ED_Data$Arrive_DT <- as.data.frame(substr(ED_Data$arrive, 1, 2))
+
+ED_Data_1 <- ED_Data %>%
+  filter(SH_DT != Arrive_DT)
+
+# Check for empty cells
+ED_Data_empty <- ED_Data %>%
+  filter_all(any_vars(. == ""))
+
+# Identify duplicates
+duplicates <- ED_Data[duplicated(ED_Data$visit_num) | duplicated(ED_Data$visit_num, fromLast = TRUE), ]
+cat("Duplicate Rows:\n")
+print(duplicates)
+
+# Visualize the data
+plot(ED_Data$visit_num,ED_Data$pred_lnlos, type = "l", 
+     ylab = "Expected Log Length of Stay", xlab = "Visitor Number",
+     lwd = 1)
+
+# Example histogram of pred_lnlos:
+ggplot(ED_Data, aes(x = pred_lnlos)) +
+  geom_histogram(binwidth = 1, fill = "black", color = "black") +
+  labs(title = "Distribution of Expecteg log Stay", x = "pred_lnlos", y = "Frequency")
+
+# 1) ---------------------------------------------------------------------------------------------------------------------------------
+#Create two coloumns that give 12 when "p.m." is in shift_start and another coloumn for shift_end  
+ED_Data$shift_start_PM <- ifelse(grepl("p\\.m\\.", ED_Data$shift_start, ignore.case = TRUE), 12, 0)
+ED_Data$shift_end_PM <- ifelse(grepl("p\\.m\\.", ED_Data$shift_end, ignore.case = TRUE), 12, 0)
+
+# Remove AM and PM from shift_start and shift_end
+
+ED_Data$shift_start <- gsub("\\s?[ap]\\.?m\\.?", "", ED_Data$shift_start, ignore.case = TRUE)
+ED_Data$shift_end <- gsub("\\s?[ap]\\.?m\\.?", "", ED_Data$shift_end, ignore.case = TRUE)
+
+# Replacing noon with 12
+ED_Data <- replace(ED_Data, ED_Data == "noon", "12")
+
+# Changing time format into 24-hour format
+
+ED_Data$shift_start <- as.numeric(ED_Data$shift_start) + ED_Data$shift_start_PM
+ED_Data$shift_end <- as.numeric(ED_Data$shift_end) + ED_Data$shift_end_PM
+
+# Creating a coloumn for patient leave time 
+ED_Data$patient_leave_time <- substr(ED_Data$leave, 10, 16)
+ED_Data$patient_arrive_time <- substr(ED_Data$arrive, 10, 16)
+
+# Replace ":" with "." to numerically compare shift_start and patient arrive time
+ED_Data$patient_arrive_time <- as.numeric(gsub(":", ".", ED_Data$patient_arrive_time))
+
+# Replace ":" with "." to numerically compare shift_end and patient leave time
+ED_Data$patient_leave_time <- as.numeric(gsub(":", ".", ED_Data$patient_leave_time))
+
+# Creating a dataset that contains patients who left after the physician's shift end
+ED_Data_Leave <- filter(ED_Data, shift_end < patient_leave_time)
+
+# Creating a dataset that contains patients who came before the physician's shift start and on the same date
+ED_Data_arrive <- filter(ED_Data, shift_start > patient_arrive_time & SH_DT == Arrive_DT)
+
+(nrow(ED_Data_arrive) + nrow(ED_Data_Leave))/nrow(ED_Data)
+
+# 2) ---------------------------------------------------------------------------------------------------------------------------------
+#plotting Severity VS Hour of the day
+
+plot(ED_Data$patient_arrive_time,ED_Data$pred_lnlos, 
+     ylab = "Expected Log Length of Stay", xlab = "Patient Arrive Time (24-hour format)",
+     lwd = 1)
+
+cor(ED_Data$patient_arrive_time,ED_Data$pred_lnlos)
+
+
+# 3) ---------------------------------------------------------------------------------------------------------------------------------
+
+# Creating a seperate data set
+census <- data.frame(
+  phys_id = ED_Data$phys_id,
+  shift_date = as.Date(ED_Data$shift_date, format = "%d-%b-%y"),
+  shift_start = as.numeric(ED_Data$shift_start),
+  shift_end = as.numeric(ED_Data$shift_end),
+  arrive_date = ED_Data$Arrive_DT,
+  patient_arrive_time = ED_Data$patient_arrive_time,
+  patient_leave_time = ED_Data$patient_leave_time,
+  patient_id = ED_Data$visit_num
+)
+
+# Arranging by id, shift date,and patient arrive time
+census <- census %>% arrange(phys_id, shift_date, patient_arrive_time)
+
+#Allowing leave time to be at most 4 hours after shift end
+census <- filter(census, census$patient_leave_time - census$shift_end <= 4)
+
+# Add the 'hour_of_day' column
+census$hour_of_day <- 0
+
+# Loop through each row
+for (i in 1:nrow(census)) {
+  diff_hours <- abs(census$patient_leave_time[i] - census$shift_start[i])
+  
+  # Check for differences between 1 and 2
+  for (j in 1:10) {
+    if (diff_hours >= j & diff_hours < (j + 1))   {
+      census$hour_of_day[i] <- j
+      break  # Exit the inner loop once a match is found
+    }
+  }
+}
+
+# Remove zero observations as they probably mean a patient stayed more than 4 hours (due to 24 hour-format)
+census <- filter(census, census$hour_of_day != 0)
+
+result <- census %>%
+  group_by(phys_id, hour_of_day) %>%
+  summarize(patient_count = n())
+
+# Calculating upper and lower bounds
+upper <- result %>%
+  group_by(hour_of_day)%>%
+  summarize(Upper_bound = max(patient_count))
+
+lower <- result %>%
+  group_by(hour_of_day)%>%
+  summarize(Upper_bound = min(patient_count))
+
+# Add the 'hour_partway' column
+census$hour_partway <- 0
+
+# Loop through each row
+for (i in 1:nrow(census)) {
+  if (abs(census$patient_leave_time[i] - census$patient_arrive_time[i]) <1) {
+    census$hour_partway[i] <- 1
+  } else {census$hour_partway[i] <- 0}
+}
+
+# Calculating Finely results
+results_finely <- census %>%
+  filter( hour_partway== 1 ) %>%
+  group_by(phys_id, hour_partway) %>%
+  summarize( patient_count = n())
+
+# 4) ---------------------------------------------------------------------------------------------------------------------------------
+# Regression Analysis 
+
+ED_Data$Shift_duration <- abs(ED_Data$shift_end - ED_Data$shift_start)
+ED_Data$Shift_duration<- replace(ED_Data$Shift_duration,ED_Data$Shift_duration == 15, 9)
+ED_Data_p <- pdata.frame(ED_Data)
+
+reg1 <- plm(pred_lnlos ~ phys_id ,model= "pooling", data = ED_Data_p)
+summary(reg1)
+
+boxplot(pred_lnlos ~ phys_id, data = ED_Data, col = "lightblue", 
+        main = "Physician Discharge Speed", ylab = "Expected Log Length of Stay",
+        xlab = "Physician ID")
+
+# Coefficients Plot
+par(mfrow=c(2,2))
+coefplot(reg1)
+
+reg2 <- plm(pred_lnlos ~ phys_id + Shift_duration,model= "pooling", data = ED_Data_p)
+summary(reg2)
+
+#  Coefficients Plot
+coefplot(reg2)
+
+write.csv(result, "census.csv", row.names = FALSE)
+write.csv(results_finely, "census_finely.csv", row.names = FALSE)
+write.csv(upper, "census_upper.csv", row.names = FALSE)
+write.csv(lower, "census_lower.csv", row.names = FALSE)
+
